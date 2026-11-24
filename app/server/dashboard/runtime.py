@@ -67,8 +67,16 @@ class Runtime:
             "widgets": widgets,
         }
 
-    def every(self, seconds: float, fn, first_delay: float = 0) -> None:
-        self._jobs.append([seconds, fn, time.monotonic() + first_delay])
+    def every(self, seconds, fn, first_delay: float = 0) -> list:
+        """Run fn every `seconds` (a number or a callable returning one) on the job thread."""
+        job = [seconds, fn, time.monotonic() + first_delay]
+        self._jobs.append(job)
+        return job
+
+    @staticmethod
+    def trigger(job) -> None:
+        """Run a job on the next tick of the job thread."""
+        job[2] = 0
 
     def run_jobs_once(self) -> None:
         now = time.monotonic()

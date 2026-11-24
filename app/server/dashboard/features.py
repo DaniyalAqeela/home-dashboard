@@ -4,7 +4,9 @@ import functools
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import prayer
+from flask import jsonify, request
+
+from . import fsutil, prayer, weather
 
 
 def _tz(rt):
@@ -57,9 +59,47 @@ def _day_signature(rt):
     return tuple(sig)
 
 
+def _install_weather(rt):
+    path = rt.data_dir / "cache" / "weather.json"
+    rt.weather = fsutil.read_json(path)
+    rt.weather_error = None
+
+    def refresh_weather(http=None):
+        loc = rt.config["location"]
+        if loc["lat"] is None or loc["lon"] is None:
+            return
+        try:
+            data = weather.fetch_forecast(loc["lat"], loc["lon"], http)
+        except Exception as e:  # offline etc.: keep the last forecast
+            rt.weather_error = str(e)
+            return
+        data.update(lat=loc["lat"], lon=loc["lon"])
+        rt.weather, rt.weather_error = data, None
+        fsutil.atomic_write_json(path, data)
+        rt.state.bump()
+
+    def weather_data(w, now):
+        loc = rt.config["location"]
+        if loc["lat"] is None or loc["lon"] is None:
+            return {"error": "Set your location in Settings → Location"}
+        if not rt.weather:
+            return {"error": "Loading weather…"}
+        return {**rt.weather, "place": loc["name"]}
+
+    rt.refresh_weather = refresh_weather
+    rt.providers["weather"] = weather_data
+    job = rt.every(1800, refresh_weather, first_delay=3)
+
+    def on_location(old, new):
+        if (old["location"]["lat"], old["location"]["lon"]) != (new["location"]["lat"], new["location"]["lon"]):
+            rt.trigger(job)
+    rt.config_hooks.append(on_location)
+
+
 def install(rt) -> None:
     rt.providers["shalat"] = lambda w, now: shalat_data(rt, w, now)
     rt.providers["clock"] = lambda w, now: clock_data(rt, w, now)
+    _install_weather(rt)
     last = {"sig": None}
 
     def tick_day():
@@ -73,4 +113,10 @@ def install(rt) -> None:
 
 
 def install_routes(app, rt) -> None:
-    pass
+    @app.get("/api/location/search")
+    @app.login_required
+    def location_search():
+        try:
+            return jsonify(weather.search_places(request.args.get("q", "")))
+        except Exception as e:
+            return jsonify(error=f"Search failed: {e}"), 502

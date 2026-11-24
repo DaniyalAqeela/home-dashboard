@@ -19,7 +19,9 @@ def main():
     rt = Runtime(a.data, boot, a.appdir, dev=a.dev, port=a.port)
     from . import features
     features.install(rt)
-    if rt.auth.check_reset_file():
+    if (rt.boot_dir / "reset-password").exists():
+        with rt.system.boot_rw():
+            rt.auth.check_reset_file()
         logging.getLogger("dashboard").warning("password reset via reset-password file")
     app = create_app(rt)
     features.install_routes(app, rt)

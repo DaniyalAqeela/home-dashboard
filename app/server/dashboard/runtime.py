@@ -1,4 +1,5 @@
 """Wires config, state, auth, system and the background jobs together."""
+import copy
 import logging
 import threading
 import time
@@ -22,6 +23,7 @@ class Runtime:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.config_path = self.data_dir / "config.json"
         self.config = config_mod.load(self.config_path)
+        self._saved = copy.deepcopy(self.config)  # hooks diff against this, even if rt.config was edited in place
         self.state = DisplayState()
         self.auth = Auth(self.data_dir, self.boot_dir)
         self.system = DevSystem(self.data_dir, self.boot_dir, port) if dev else System(self.data_dir, self.boot_dir)
@@ -37,8 +39,9 @@ class Runtime:
 
     def update_config(self, new: dict) -> dict:
         with self._lock:
-            old = self.config
+            old = self._saved
             self.config = config_mod.save(self.config_path, new)
+            self._saved = copy.deepcopy(self.config)
         for hook in self.config_hooks:
             try:
                 hook(old, self.config)

@@ -7,7 +7,11 @@ from zoneinfo import ZoneInfo
 
 from flask import abort, jsonify, request, send_from_directory
 
-from . import drive, feeds, fsutil, photos, prayer, weather
+import logging
+
+from . import drive, feeds, fsutil, photos, prayer, system, weather
+
+log = logging.getLogger("dashboard")
 
 # shortcut: fixed 1920px long side (Pi 3 tops out at 1080p); derive from the display mode if 4K panels matter.
 PHOTO_LONG_SIDE = 1920
@@ -174,12 +178,44 @@ def _install_photos(rt):
     rt.config_hooks.append(on_drive_change)
 
 
+SYSTEM_SETTINGS = ((("display", "mode"), "set_display_mode"), (("location", "timezone"), "set_timezone"),
+                   (("location", "country"), "set_country"))
+
+
+def _install_system(rt):
+    rt.screen_off = False
+
+    def screen_tick():
+        sch = rt.config["display"]["schedule"]
+        now = datetime.now(_tz(rt)).time()
+        want_off = bool(sch["enabled"]) and system.in_off_window(now, sch["off"], sch["on"])
+        if want_off != rt.screen_off:
+            rt.system.screen_power(not want_off)
+            rt.screen_off = want_off
+
+    rt.screen_tick = screen_tick
+    job = rt.every(30, screen_tick, first_delay=10)
+
+    def on_change(old, new):
+        for (section, key), method in SYSTEM_SETTINGS:
+            value = new[section][key]
+            if value != old[section][key] and value:
+                try:
+                    getattr(rt.system, method)(value)
+                except Exception:
+                    log.exception("%s(%r) failed", method, value)
+        if old["display"]["schedule"] != new["display"]["schedule"]:
+            rt.trigger(job)
+    rt.config_hooks.append(on_change)
+
+
 def install(rt) -> None:
     rt.providers["shalat"] = lambda w, now: shalat_data(rt, w, now)
     rt.providers["clock"] = lambda w, now: clock_data(rt, w, now)
     _install_weather(rt)
     _install_news(rt)
     _install_photos(rt)
+    _install_system(rt)
 
     def rotate_tick():
         now = time.time()
@@ -250,3 +286,60 @@ def install_routes(app, rt) -> None:
         if source not in dirs or name.startswith("."):
             abort(404)
         return send_from_directory(dirs[source], name, max_age=86400)
+
+    def body():
+        return request.get_json(silent=True) or {}
+
+    @app.get("/api/system/info")
+    @app.login_required
+    def system_info():
+        return jsonify(version=rt.version, urls=rt.system.urls(), modes=rt.system.display_modes(),
+                       clockSynced=rt.system.clock_synced(), freeSpace=rt.system.free_space(),
+                       screenOff=rt.screen_off, uptime=time.monotonic() - rt.started)
+
+    @app.get("/api/wifi/scan")
+    @app.login_required
+    def wifi_scan():
+        try:
+            return jsonify(networks=rt.system.wifi_scan(), status=rt.system.wifi_status())
+        except Exception as e:
+            return jsonify(error=f"Wi-Fi scan failed: {e}"), 502
+
+    @app.post("/api/wifi/connect")
+    @app.login_required
+    def wifi_connect():
+        b = body()
+        try:
+            rt.system.wifi_connect(str(b.get("ssid", "")), str(b.get("password", "")))
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        except Exception as e:
+            return jsonify(error=f"Couldn't save Wi-Fi: {e}"), 502
+        return jsonify(ok=True)
+
+    @app.post("/api/wifi/forget")
+    @app.login_required
+    def wifi_forget():
+        rt.system.wifi_forget(str(body().get("ssid", "")))
+        return jsonify(ok=True)
+
+    @app.post("/api/system/restart")
+    @app.login_required
+    def system_restart():
+        rt.system.restart_app()
+        return jsonify(ok=True)
+
+    @app.post("/api/system/reboot")
+    @app.login_required
+    def system_reboot():
+        rt.system.reboot()
+        return jsonify(ok=True)
+
+    @app.get("/api/system/logs")
+    @app.login_required
+    def system_logs():
+        try:
+            n = int(request.args.get("lines", 200))
+        except ValueError:
+            n = 200
+        return jsonify(text=rt.system.logs(n))

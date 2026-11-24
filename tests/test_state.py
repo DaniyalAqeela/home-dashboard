@@ -38,3 +38,19 @@ def test_screenshot_wanted_expires(monkeypatch):
     assert s.rev == rev + 1  # only the rising edge bumps
     now[0] += 6
     assert s.screenshot_wanted() is False
+
+
+def test_background_job_does_not_block_and_never_overlaps(rt):
+    import threading
+    release, runs, quick = threading.Event(), [], []
+    rt.every(0, lambda: (runs.append(1), release.wait(5)), background=True)
+    rt.every(0, lambda: quick.append(1))
+    rt.run_jobs_once()  # starts the slow job in its own thread and returns
+    rt.run_jobs_once()  # slow job still running: not started again
+    assert len(quick) == 2
+    release.set()
+    for _ in range(100):
+        if len(runs) == 1 and not any(j[4].is_set() for j in rt._jobs if j[3]):
+            break
+        time.sleep(0.01)
+    assert runs == [1]

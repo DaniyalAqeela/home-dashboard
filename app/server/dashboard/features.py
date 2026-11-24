@@ -5,9 +5,12 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import jsonify, request
+from flask import abort, jsonify, request, send_from_directory
 
-from . import feeds, fsutil, prayer, weather
+from . import drive, feeds, fsutil, photos, prayer, weather
+
+# shortcut: fixed 1920px long side (Pi 3 tops out at 1080p); derive from the display mode if 4K panels matter.
+PHOTO_LONG_SIDE = 1920
 
 
 def _tz(rt):
@@ -88,7 +91,7 @@ def _install_weather(rt):
 
     rt.refresh_weather = refresh_weather
     rt.providers["weather"] = weather_data
-    job = rt.every(1800, refresh_weather, first_delay=3)
+    job = rt.every(1800, refresh_weather, first_delay=3, background=True)
 
     def on_location(old, new):
         if (old["location"]["lat"], old["location"]["lon"]) != (new["location"]["lat"], new["location"]["lon"]):
@@ -120,7 +123,7 @@ def _install_news(rt):
 
     rt.refresh_feeds = refresh_feeds
     rt.providers["news"] = news_data
-    job = rt.every(900, refresh_feeds, first_delay=2)
+    job = rt.every(900, refresh_feeds, first_delay=2, background=True)
     rt.config_hooks.append(lambda old, new: _feed_urls(old) != _feed_urls(new) and rt.trigger(job))
 
 
@@ -139,14 +142,50 @@ def _rotate_news(rt, now) -> bool:
     return changed
 
 
+def _install_photos(rt):
+    rt.photos = photos.PhotoLibrary(rt.data_dir)
+    rt.slideshow = photos.Slideshow()
+    rt.drive = drive.DriveSync(rt.photos.drive_dir)
+    rt.drive_status = {"count": len(rt.photos.all("drive")), "lastSync": None, "error": None,
+                       "added": 0, "removed": 0}
+
+    def sync_drive():
+        p = rt.config["photos"]
+        if not p["driveUrl"]:
+            rt.drive_status.update(error=None, count=len(rt.photos.all("drive")))
+            return
+        r = rt.drive.sync(p["driveUrl"], p["apiKey"], PHOTO_LONG_SIDE)
+        rt.drive_status.update(r, lastSync=time.time())
+
+    def photos_data(w, now):
+        cur = rt.slideshow.current(w["id"])
+        if cur is None:
+            return {"photo": None, "error": "No photos yet. Add a Google Drive link or upload photos in Settings."}
+        source = "drive" if cur.parent == rt.photos.drive_dir else "uploads"
+        return {"photo": f"/photo/{source}/{cur.name}"}
+
+    rt.providers["photos"] = photos_data
+    rt.drive_job = rt.every(lambda: rt.config["photos"]["syncMinutes"] * 60, sync_drive, first_delay=5,
+                            background=True)
+
+    def on_drive_change(old, new):
+        if (old["photos"]["driveUrl"], old["photos"]["apiKey"]) != (new["photos"]["driveUrl"], new["photos"]["apiKey"]):
+            rt.trigger(rt.drive_job)
+    rt.config_hooks.append(on_drive_change)
+
+
 def install(rt) -> None:
     rt.providers["shalat"] = lambda w, now: shalat_data(rt, w, now)
     rt.providers["clock"] = lambda w, now: clock_data(rt, w, now)
     _install_weather(rt)
     _install_news(rt)
+    _install_photos(rt)
 
     def rotate_tick():
-        if _rotate_news(rt, time.time()):
+        now = time.time()
+        news = _rotate_news(rt, now)
+        slides = rt.slideshow.tick(rt.config["widgets"], rt.photos, now)
+        if news or slides:
             rt.state.bump()
 
     rt.rotate_tick = rotate_tick
@@ -171,3 +210,43 @@ def install_routes(app, rt) -> None:
             return jsonify(weather.search_places(request.args.get("q", "")))
         except Exception as e:
             return jsonify(error=f"Search failed: {e}"), 502
+
+    @app.get("/api/photos")
+    @app.login_required
+    def photos_status():
+        progress = rt.drive.progress
+        return jsonify(drive={**rt.drive_status, "progress": list(progress) if progress else None},
+                       uploads=rt.photos.uploads())
+
+    @app.post("/api/photos/sync")
+    @app.login_required
+    def photos_sync():
+        rt.trigger(rt.drive_job)
+        return jsonify(ok=True)
+
+    @app.post("/api/photos/upload")
+    @app.login_required
+    def photos_upload():
+        added, errors = [], []
+        for f in request.files.getlist("files"):
+            try:
+                added.append(rt.photos.add_upload(f.filename or "photo", f.read(photos.MAX_UPLOAD + 1),
+                                                  PHOTO_LONG_SIDE))
+            except (ValueError, OSError) as e:
+                errors.append({"name": f.filename, "error": str(e)})
+        return jsonify(added=added, errors=errors)
+
+    @app.delete("/api/photos/uploads/<name>")
+    @app.login_required
+    def photos_delete(name):
+        if not rt.photos.delete_upload(name):
+            return jsonify(error="No such photo"), 404
+        return jsonify(ok=True)
+
+    @app.get("/photo/<source>/<name>")
+    @app.local_or_login
+    def photo_file(source, name):
+        dirs = {"drive": rt.photos.drive_dir, "uploads": rt.photos.upload_dir}
+        if source not in dirs or name.startswith("."):
+            abort(404)
+        return send_from_directory(dirs[source], name, max_age=86400)

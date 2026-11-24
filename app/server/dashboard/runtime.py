@@ -67,9 +67,10 @@ class Runtime:
             "widgets": widgets,
         }
 
-    def every(self, seconds, fn, first_delay: float = 0) -> list:
-        """Run fn every `seconds` (a number or a callable returning one) on the job thread."""
-        job = [seconds, fn, time.monotonic() + first_delay]
+    def every(self, seconds, fn, first_delay: float = 0, background: bool = False) -> list:
+        """Run fn every `seconds` (a number or a callable returning one) on the job thread.
+        background=True runs it in its own thread (network work), never two at once."""
+        job = [seconds, fn, time.monotonic() + first_delay, background, threading.Event()]
         self._jobs.append(job)
         return job
 
@@ -81,13 +82,25 @@ class Runtime:
     def run_jobs_once(self) -> None:
         now = time.monotonic()
         for job in self._jobs:
-            seconds, fn, due = job
-            if now >= due:
-                job[2] = now + (seconds() if callable(seconds) else seconds)
-                try:
-                    fn()
-                except Exception:
-                    log.error("job %s failed:\n%s", getattr(fn, "__name__", fn), traceback.format_exc())
+            seconds, fn, due, background, running = job
+            if now < due:
+                continue
+            job[2] = now + (seconds() if callable(seconds) else seconds)
+            if not background:
+                self._run_job(fn)
+            elif not running.is_set():
+                running.set()
+                threading.Thread(target=self._run_job, args=(fn, running), daemon=True).start()
+
+    @staticmethod
+    def _run_job(fn, running=None) -> None:
+        try:
+            fn()
+        except Exception:
+            log.error("job %s failed:\n%s", getattr(fn, "__name__", fn), traceback.format_exc())
+        finally:
+            if running is not None:
+                running.clear()
 
     def start_background(self) -> None:
         def loop():

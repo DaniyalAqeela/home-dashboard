@@ -1,0 +1,8 @@
+devdata/
+dist/
+__pycache__/
+*.pyc
+*.img
+*.img.xz
+.pytest_cache/
+.superpowers/

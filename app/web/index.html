@@ -1,1 +1,59 @@
-<!doctype html><title>Dashboard</title><p>Settings site coming soon.</p>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard settings</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div id="auth" class="overlay" hidden>
+  <form id="authForm" class="card auth">
+    <h1 id="authTitle">Dashboard</h1>
+    <p id="authHint" class="muted"></p>
+    <input type="password" id="authPw" placeholder="Password" autocomplete="current-password" required>
+    <input type="password" id="authPw2" placeholder="Repeat password" autocomplete="new-password" hidden>
+    <button type="submit" id="authBtn">Log in</button>
+    <p id="authErr" class="err"></p>
+  </form>
+</div>
+
+<div id="busy" class="overlay" hidden><div class="card"><div class="spinner"></div><p id="busyText"></p></div></div>
+
+<header>
+  <strong class="brand">Dashboard</strong>
+  <nav id="tabs">
+    <button data-tab="design">Design</button>
+    <button data-tab="photos">Photos</button>
+    <button data-tab="display">Display</button>
+    <button data-tab="location">Location</button>
+    <button data-tab="network">Network</button>
+    <button data-tab="updates">Updates</button>
+    <button data-tab="system">System</button>
+  </nav>
+  <button id="logout" class="ghost">Log out</button>
+</header>
+
+<main>
+  <section id="tab-design" class="tab design">
+    <div class="preview-col">
+      <div id="stage" class="stage">
+        <img id="shot" alt="Live view of the dashboard screen">
+        <div id="boxes" class="boxes"></div>
+      </div>
+      <p class="muted small"><span id="shotNote">Live view of the screen, refreshed every second.</span>
+        Drag a box to move it, drag its corner to resize.</p>
+    </div>
+    <aside id="panel" class="panel"></aside>
+  </section>
+  <section id="tab-photos" class="tab"></section>
+  <section id="tab-display" class="tab"></section>
+  <section id="tab-location" class="tab"></section>
+  <section id="tab-network" class="tab"></section>
+  <section id="tab-updates" class="tab"></section>
+  <section id="tab-system" class="tab"></section>
+</main>
+<div id="toast" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

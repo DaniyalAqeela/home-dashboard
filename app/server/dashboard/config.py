@@ -35,7 +35,7 @@ COMMON_STYLE = [
 PRAYER_METHODS = [
     ["mwl", "Muslim World League"], ["isna", "ISNA (North America)"], ["egypt", "Egyptian General Authority"],
     ["ummalqura", "Umm al-Qura (Makkah)"], ["karachi", "Karachi"],
-    ["singapore", "Singapore / Kemenag / JAKIM"], ["turkey", "Turkey (Diyanet)"], ["tehran", "Tehran"],
+    ["singapore", "Singapore / Kemenag / JAKIM"],
     ["dubai", "Dubai / Gulf"], ["kuwait", "Kuwait"], ["qatar", "Qatar"],
     ["moonsighting", "Moonsighting Committee"], ["custom", "Custom angles"],
 ]

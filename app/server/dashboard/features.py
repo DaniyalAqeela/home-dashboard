@@ -5,11 +5,12 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from flask import abort, jsonify, request, send_from_directory
+from flask import abort, jsonify, request, send_file, send_from_directory
 
 import logging
+from pathlib import Path
 
-from . import drive, feeds, fsutil, photos, prayer, system, weather
+from . import backup, drive, feeds, fsutil, photos, prayer, system, updates, weather
 
 log = logging.getLogger("dashboard")
 
@@ -209,6 +210,29 @@ def _install_system(rt):
     rt.config_hooks.append(on_change)
 
 
+FACTORY_DIR = Path("/usr/share/dashboard/factory")
+BIG_UPLOAD = 2200 * 1024 * 1024  # backups with many photos
+
+
+def _install_updates(rt):
+    rt.app_root = rt.data_dir / "app"
+    rt.factory_dir = None if rt.dev else FACTORY_DIR
+    rt.latest = {"latest": None, "checked": None, "error": None}
+
+    def check_github():
+        try:
+            rt.latest.update(latest=updates.github_latest(rt.config["updates"]["repo"]), error=None)
+        except Exception as e:
+            rt.latest["error"] = str(e)
+        rt.latest["checked"] = time.time()
+
+    rt.check_github = check_github
+    job = rt.every(86400, check_github, first_delay=60, background=True)
+    rt.config_hooks.append(lambda old, new: old["updates"] != new["updates"] and rt.trigger(job))
+    # app-launcher counts boots in `attempts`; staying up 30 s means this release works
+    rt.every(10 ** 9, lambda: updates.mark_healthy(rt.app_root), first_delay=30)
+
+
 def install(rt) -> None:
     rt.providers["shalat"] = lambda w, now: shalat_data(rt, w, now)
     rt.providers["clock"] = lambda w, now: clock_data(rt, w, now)
@@ -216,6 +240,7 @@ def install(rt) -> None:
     _install_news(rt)
     _install_photos(rt)
     _install_system(rt)
+    _install_updates(rt)
 
     def rotate_tick():
         now = time.time()
@@ -343,3 +368,86 @@ def install_routes(app, rt) -> None:
         except ValueError:
             n = 200
         return jsonify(text=rt.system.logs(n))
+
+    def install_and_restart(path):
+        try:
+            version = updates.install_bundle(path, rt.app_root, factory=rt.factory_dir)
+        except updates.UpdateError as e:
+            return jsonify(error=str(e)), 400
+        finally:
+            Path(path).unlink(missing_ok=True)
+        rt.system.restart_app()
+        return jsonify(ok=True, version=version)
+
+    @app.get("/api/update/status")
+    @app.login_required
+    def update_status():
+        if request.args.get("check"):
+            rt.check_github()
+        cur = updates.resolve_release(rt.app_root, "current")
+        prev = updates.resolve_release(rt.app_root, "previous")
+        latest = rt.latest["latest"]
+        return jsonify(version=rt.version, installed=updates._version_of(cur), previous=updates._version_of(prev),
+                       latest=latest, newer=bool(latest and latest["asset_url"]
+                                                 and updates.is_newer(latest["version"], rt.version)),
+                       checked=rt.latest["checked"], error=rt.latest["error"])
+
+    @app.post("/api/update/upload")
+    @app.login_required
+    def update_upload():
+        f = request.files.get("bundle")
+        if not f:
+            return jsonify(error="Choose an update file first."), 400
+        path = rt.data_dir / "cache" / "update-upload.tar.gz"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        f.save(path)
+        return install_and_restart(path)
+
+    @app.post("/api/update/github")
+    @app.login_required
+    def update_github():
+        rt.check_github()
+        latest = rt.latest["latest"]
+        if not latest or not latest["asset_url"]:
+            return jsonify(error=rt.latest["error"] or "No app update found in the GitHub releases."), 404
+        path = rt.data_dir / "cache" / "update-github.tar.gz"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            updates.download(latest["asset_url"], path)
+        except updates.UpdateError as e:
+            return jsonify(error=str(e)), 502
+        return install_and_restart(path)
+
+    @app.post("/api/update/rollback")
+    @app.login_required
+    def update_rollback():
+        try:
+            version = updates.rollback(rt.app_root)
+        except updates.UpdateError as e:
+            return jsonify(error=str(e)), 409
+        rt.system.restart_app()
+        return jsonify(ok=True, version=version)
+
+    @app.get("/api/backup")
+    @app.login_required
+    def backup_download():
+        out = rt.data_dir / "cache" / "backup.zip"
+        backup.make_backup(rt.data_dir, out)
+        r = send_file(out, as_attachment=True, mimetype="application/zip",
+                      download_name=f"dashboard-backup-{datetime.now(_tz(rt)).date().isoformat()}.zip")
+        r.call_on_close(lambda: out.unlink(missing_ok=True))
+        return r
+
+    @app.post("/api/restore")
+    @app.login_required
+    def backup_restore():
+        request.max_content_length = BIG_UPLOAD
+        f = request.files.get("backup")
+        if not f:
+            return jsonify(error="Choose a backup file first."), 400
+        try:
+            cfg = backup.restore_backup(f.stream, rt.data_dir)
+        except ValueError as e:
+            return jsonify(error=str(e)), 400
+        rt.update_config(cfg)
+        return jsonify(ok=True)

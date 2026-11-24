@@ -7,7 +7,7 @@ Requires=dashboard-prepare.service
 ExecStart=/usr/libexec/dashboard/app-launcher
 Restart=always
 RestartSec=2
-Environment=PYTHONUNBUFFERED=1 HOME=/data
+Environment=PYTHONUNBUFFERED=1 HOME=/data TMPDIR=/data/tmp
 
 [Install]
 WantedBy=multi-user.target

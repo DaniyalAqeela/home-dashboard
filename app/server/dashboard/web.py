@@ -23,7 +23,7 @@ def create_app(rt) -> Flask:
     app = Flask(__name__, static_folder=None)
     app.secret_key = rt.auth.secret_key()
     app.config.update(SESSION_COOKIE_SAMESITE="Strict", SESSION_COOKIE_HTTPONLY=True,
-                      PERMANENT_SESSION_LIFETIME=timedelta(days=30), MAX_CONTENT_LENGTH=300 * 1024 * 1024)
+                      PERMANENT_SESSION_LIFETIME=timedelta(days=30), MAX_CONTENT_LENGTH=256 * 1024 * 1024)  # /api/restore raises it per request
     app.rt = rt
     last_good = {"shot": None}
 

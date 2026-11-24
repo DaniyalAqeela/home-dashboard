@@ -8,7 +8,8 @@ if ! mountpoint -q /data; then
 	mkfs.ext4 -F -q -L data "$PART" && mount -o noatime "$PART" /data || exit 1
 fi
 resize2fs "$PART" >/dev/null 2>&1 || true
-mkdir -p /data/etc /data/app/releases /data/photos /data/cache /data/timesync /run/dashboard
+rm -rf /data/tmp  # upload spool files left by a crash
+mkdir -p /data/etc /data/app/releases /data/photos /data/cache /data/tmp /data/timesync /run/dashboard
 [ -e /data/etc/localtime ] || ln -sfn /usr/share/zoneinfo/UTC /data/etc/localtime
 W=/data/etc/wpa_supplicant-wlan0.conf
 [ -s "$W" ] || printf 'ctrl_interface=/run/wpa_supplicant\nupdate_config=1\ncountry=US\n' > "$W"

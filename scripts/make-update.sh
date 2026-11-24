@@ -6,7 +6,8 @@ cd "$(dirname "$0")/.."
 ver=$(tr -d '[:space:]' < app/VERSION)
 mkdir -p dist
 out="dist/dashboard-app-$ver.tar.gz"
-tar --exclude=__pycache__ --exclude='*.pyc' -czf "$out" -C app VERSION server display web
+hook=(); [ -f app/post-install.sh ] && hook=(post-install.sh)  # optional, runs once on install (spec 7.6)
+tar --exclude=__pycache__ --exclude='*.pyc' -czf "$out" -C app VERSION server display web "${hook[@]}"
 # self-check: the bundle must pass the same validation the dashboard runs before installing
 check='import sys, tempfile; sys.path.insert(0, "app/server")
 from dashboard.updates import install_bundle

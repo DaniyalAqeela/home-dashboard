@@ -73,3 +73,10 @@ def test_safe_name():
     assert fsutil.safe_name("")
     assert not fsutil.safe_name("...").startswith(".")
     assert len(fsutil.safe_name("x" * 300)) <= 80
+
+
+def test_normalize_unknown_timezone():
+    from dashboard.config import normalize
+    c = normalize({"location": {"timezone": "Asia/Jakart"}})
+    assert c["location"]["timezone"] == normalize({})["location"]["timezone"]
+    assert normalize({"location": {"timezone": "Asia/Jakarta"}})["location"]["timezone"] == "Asia/Jakarta"

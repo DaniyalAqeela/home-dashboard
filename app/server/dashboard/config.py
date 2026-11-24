@@ -7,6 +7,7 @@ import math
 import re
 import uuid
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import fsutil
 
@@ -196,7 +197,11 @@ def _norm_value(field, value):
         return d
     if t == "tz":
         if isinstance(value, str) and re.match(r"^[A-Za-z0-9_+\-]+(/[A-Za-z0-9_+\-]+){0,2}$", value):
-            return value
+            try:
+                ZoneInfo(value)
+                return value
+            except (ZoneInfoNotFoundError, ValueError):
+                pass
         return d
     if t == "country":
         if isinstance(value, str) and re.match(r"^[A-Za-z]{2}$", value):

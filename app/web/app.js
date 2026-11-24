@@ -401,7 +401,7 @@ async function renderPhotos() {
   });
   section("photos",
     fieldsCard("Google Drive", "photos",
-      "Paste the link of a Google Drive folder. In Drive: Share → General access → Anyone with the link. The API key is only needed if not all photos appear (the public folder view lists about 50 photos)."),
+      "Paste the link of a Google Drive folder. In Drive: Share → General access → Anyone with the link. Leave the API key empty: it's only a fallback in case Google ever changes its public folder page."),
     card("Sync status", status, el("div", { class: "row" }, el("button", {
       text: "Sync now", onclick: () => api("POST", "/api/photos/sync").then(() => toast("Sync started")).catch(fail),
     }))),

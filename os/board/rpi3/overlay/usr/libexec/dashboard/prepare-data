@@ -2,10 +2,19 @@
 # Make sure /data is mounted, full size and has the directories the app needs.
 PART=/dev/mmcblk0p3
 if ! mountpoint -q /data; then
-	# shortcut: an unmountable data partition is reformatted (settings are lost,
-	# photos re-sync, Restore brings design back). Better than a dead dashboard.
-	echo "prepare-data: /data is not mounted, reformatting $PART" >&2
-	mkfs.ext4 -F -q -L data "$PART" && mount -o noatime "$PART" /data || exit 1
+	e2fsck -fy "$PART" >/dev/null 2>&1
+	if mount -o noatime "$PART" /data; then
+		echo "prepare-data: /data needed a repair and is mounted again" >&2
+	elif [ "$(dd if="$PART" bs=1 skip=1080 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')" != "53ef" ]; then
+		# no ext4 superblock at all: nothing to lose
+		echo "prepare-data: $PART has no filesystem, formatting it" >&2
+		mkfs.ext4 -F -q -L data "$PART" && mount -o noatime "$PART" /data || exit 1
+	else
+		# Never format a filesystem that holds the family's settings and photos: run on
+		# a RAM disk (changes are lost at reboot) and leave the card for recovery.
+		echo "prepare-data: can't mount $PART; running from memory, NOTHING WILL BE SAVED" >&2
+		mount -t tmpfs -o size=256m,mode=0755 tmpfs /data || exit 1
+	fi
 fi
 resize2fs "$PART" >/dev/null 2>&1 || true
 rm -rf /data/tmp  # upload spool files left by a crash

@@ -1,4 +1,5 @@
 [Unit]
+StartLimitIntervalSec=0
 Description=Home dashboard display
 After=dashboard.service
 

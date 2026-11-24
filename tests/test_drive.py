@@ -74,9 +74,9 @@ def test_list_folder_not_public():
 
 def test_list_folder_api_key_pagination():
     pages = {
-        None: {"files": [{"id": "a1", "name": "a.jpg", "mimeType": "image/jpeg"},
+        None: {"files": [{"id": IDS[0], "name": "a.jpg", "mimeType": "image/jpeg"},
                          {"id": "d1", "name": "doc", "mimeType": "application/pdf"}], "nextPageToken": "T2"},
-        "T2": {"files": [{"id": "b1", "name": "b.png", "mimeType": "image/png"}]},
+        "T2": {"files": [{"id": IDS[1], "name": "b.png", "mimeType": "image/png"}]},
     }
     seen = []
 
@@ -85,7 +85,7 @@ def test_list_folder_api_key_pagination():
         token = url.split("pageToken=")[1].split("&")[0] if "pageToken=" in url else None
         return Resp(json.dumps(pages[token]).encode())
     files = drive.list_folder("1folderidxxxx", api_key="KEY123", http=http)
-    assert files == [{"id": "a1", "name": "a.jpg"}, {"id": "b1", "name": "b.png"}]
+    assert files == [{"id": IDS[0], "name": "a.jpg"}, {"id": IDS[1], "name": "b.png"}]
     assert len(seen) == 2 and "key=KEY123" in seen[0]
 
 
@@ -119,3 +119,27 @@ def test_sync_keeps_files_on_error(tmp_path):
 def test_sync_bad_link(tmp_path):
     r = drive.DriveSync(tmp_path).sync("https://example.com/nope", "", 1920, http=fake_http())
     assert "Drive folder link" in r["error"]
+
+
+def test_list_folder_page_without_entries_raises():
+    # Google changed the page, or served a consent page: not "the folder is empty"
+    with pytest.raises(drive.DriveError):
+        drive.list_folder("1tmSabcdefghijklmnopqrstuv", http=fake_http(b"<html><body>Before you continue</body></html>"))
+
+
+def test_sync_empty_listing_keeps_cache(tmp_path):
+    d = drive.DriveSync(tmp_path)
+    d.sync("https://drive.google.com/drive/folders/1tmSabcdefghijklmnopqrstuv", "", 1920, http=fake_http())
+    assert len(list(tmp_path.glob("*.jpg"))) == 3
+    empty = b'<div class="flip-entries"></div>'
+    r = d.sync("https://drive.google.com/drive/folders/1tmSabcdefghijklmnopqrstuv", "", 1920, http=fake_http(empty))
+    assert r["removed"] == 0 and r["error"] and r["count"] == 3
+    assert len(list(tmp_path.glob("*.jpg"))) == 3
+
+
+def test_api_listing_drops_unsafe_ids():
+    def http(url, timeout=None):
+        body = {"files": [{"id": "../../etc/x", "name": "a.jpg", "mimeType": "image/jpeg"},
+                          {"id": IDS[0], "name": "b.jpg", "mimeType": "image/jpeg"}]}
+        return Resp(json.dumps(body).encode())
+    assert [f["id"] for f in drive.list_folder("1tmSabcdefghijklmnopqrstuv", "KEY", http)] == [IDS[0]]

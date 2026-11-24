@@ -2,6 +2,15 @@
 # Runs the QML display from the app release the server is using; falls back to
 # the factory QML if that release's QML won't load.
 FACTORY=/usr/share/dashboard/factory
+# app-launcher writes appdir just before it starts the server, so once the server
+# answers, appdir names the release that is running (not the one from before a
+# restart). Give up after ~60 s and draw whatever we have.
+i=0
+until wget -q -T 2 -O /dev/null http://127.0.0.1/api/health 2>/dev/null; do
+	i=$((i + 1))
+	[ "$i" -ge 30 ] && break
+	sleep 2
+done
 DIR=$(cat /run/dashboard/appdir 2>/dev/null)
 [ -d "$DIR/display" ] || DIR=$FACTORY
 

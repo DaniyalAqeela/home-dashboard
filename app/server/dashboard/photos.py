@@ -58,6 +58,11 @@ class PhotoLibrary:
         p.unlink()
         return True
 
+    def name_key(self):
+        """Sort key by the name people see: Drive files are stored as <file id>.jpg, uploads as <uuid8>__<name>.jpg."""
+        drive_names = fsutil.read_json(self.drive_dir / "index.json", {}) or {}
+        return lambda p: (drive_names.get(p.stem) or p.name.split("__", 1)[-1]).lower()
+
     def uploads(self) -> list:
         files = sorted(self.upload_dir.glob("*.jpg"), key=lambda p: p.stat().st_mtime, reverse=True)
         return [{"name": p.name, "size": p.stat().st_size} for p in files]
@@ -73,7 +78,7 @@ class Slideshow:
         s = self.st.get(widget_id)
         return s["current"] if s else None
 
-    def _next(self, s, files, order):
+    def _next(self, s, files, order, name_key):
         if order == "shuffle":
             pool = set(files)
             s["queue"] = [p for p in s.get("queue", []) if p in pool]
@@ -85,7 +90,7 @@ class Slideshow:
         if order == "newest":
             files = sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
         else:
-            files = sorted(files, key=lambda p: p.name.lower())
+            files = sorted(files, key=name_key())
         if s["current"] in files:
             return files[(files.index(s["current"]) + 1) % len(files)]
         return files[0]
@@ -106,7 +111,7 @@ class Slideshow:
                 if s["current"] is not None:
                     s["current"], changed = None, True
                 continue
-            nxt = self._next(s, files, o.get("order", "shuffle"))
+            nxt = self._next(s, files, o.get("order", "shuffle"), library.name_key)
             if nxt != s["current"]:
                 changed = True
             s["current"], s["nextAt"] = nxt, now + float(o.get("interval", 15))

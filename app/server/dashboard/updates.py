@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import tarfile
 import urllib.error
 import zlib
@@ -117,6 +118,11 @@ def install_bundle(tar_path, app_root, factory=None) -> str:
         raise UpdateError(NOT_BUNDLE if tmp is None else f"Couldn't unpack the update: {e}") from None
 
     final = releases / version
+    try:
+        _post_install(tmp, root.parent, final)
+    except UpdateError:
+        _cleanup(tmp)
+        raise
     current = resolve_release(root, "current")
     same = current is not None and current.resolve() == final.resolve()
     if final.exists():
@@ -139,6 +145,21 @@ def install_bundle(tar_path, app_root, factory=None) -> str:
     (root / "rolled-back").unlink(missing_ok=True)
     prune(root)
     return version
+
+
+def _post_install(unpacked: Path, data_dir: Path, final: Path) -> None:
+    """Spec 7.6: an optional post-install.sh runs once, at install time, for changes on /data."""
+    hook = unpacked / "post-install.sh"
+    if not hook.is_file():
+        return
+    env = dict(os.environ, DASHBOARD_DATA=str(data_dir), DASHBOARD_RELEASE=str(final))
+    try:
+        r = subprocess.run(["sh", str(hook)], cwd=unpacked, env=env, capture_output=True, text=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise UpdateError(f"The update's setup step couldn't run: {e}") from None
+    if r.returncode != 0:
+        tail = (r.stderr or r.stdout).strip().splitlines()[-1:] or [f"exit code {r.returncode}"]
+        raise UpdateError(f"The update's setup step failed: {tail[0][:200]}")
 
 
 def _cleanup(tmp):

@@ -5,7 +5,7 @@ kernel=Image
 arm_64bit=1
 
 # Full KMS graphics driver (Qt eglfs draws through it).
-dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d,cma-256
 max_framebuffers=1
 gpu_mem=64
 

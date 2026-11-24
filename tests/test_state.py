@@ -54,3 +54,24 @@ def test_background_job_does_not_block_and_never_overlaps(rt):
             break
         time.sleep(0.01)
     assert runs == [1]
+
+
+def test_trigger_while_background_job_runs_runs_it_again(rt):
+    import threading
+    release, runs = threading.Event(), []
+    job = rt.every(3600, lambda: (runs.append(1), release.wait(5)), background=True)
+    rt.trigger(job)
+    rt.run_jobs_once()          # first run starts and blocks
+    rt.trigger(job)             # e.g. "Sync now" pressed during the long first sync
+    rt.run_jobs_once()          # still running: must not lose the trigger
+    release.set()
+    for _ in range(200):
+        if not job[4].is_set():
+            break
+        time.sleep(0.01)
+    rt.run_jobs_once()
+    for _ in range(200):
+        if len(runs) == 2:
+            break
+        time.sleep(0.01)
+    assert len(runs) == 2

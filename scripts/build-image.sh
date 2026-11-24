@@ -33,7 +33,7 @@ fi
 # Downloads are shared between builds.
 export BR2_DL_DIR="$WORK/dl"
 
-if [ ! -f "$OUT/.config" ]; then
+if [ ! -f "$OUT/.config" ] || [ "$SRC/os/configs/dashboard_rpi3_defconfig" -nt "$OUT/.config" ]; then
 	make -C "$BR" BR2_EXTERNAL="$SRC/os" O="$OUT" dashboard_rpi3_defconfig
 fi
 
@@ -42,6 +42,10 @@ if [ $# -gt 0 ]; then
 	exit 0
 fi
 
+# Buildroot doesn't notice edits to these local inputs; refresh them (cheap) if built before.
+for p in rpi-firmware dashboard-display; do
+	if ls -d "$OUT/build/$p"-* >/dev/null 2>&1; then make -C "$BR" O="$OUT" BR2_JLEVEL="$JOBS" "$p-rebuild"; fi
+done
 make -C "$BR" O="$OUT" BR2_JLEVEL="$JOBS"
 
 VERSION="$(tr -d '[:space:]' < "$REPO/app/VERSION")"

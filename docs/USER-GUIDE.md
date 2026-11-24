@@ -48,10 +48,10 @@ anything.
 New photos you add to the folder appear within the sync interval (30 minutes by
 default), or straight away with **Sync now**. Deleted photos are removed too.
 
-**Not all photos appear?** Without an API key the dashboard can only see the first
-50 or so photos in a folder. For bigger folders, create a free Google API key (Google
-Cloud Console → APIs & Services → enable the **Google Drive API** → Credentials →
-Create credentials → API key), then paste it into **Google API key**.
+Leave **Google API key** empty. It is only a fallback: if Google ever changes its
+public folder page and syncing stops with an error, create a free key (Google Cloud
+Console → APIs & Services → enable the **Google Drive API** → Credentials → Create
+credentials → API key) and paste it there.
 
 You can also **upload photos** from your phone or computer on the same page. They
 are shown together with the Drive photos.

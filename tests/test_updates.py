@@ -178,3 +178,26 @@ def test_update_upload_route(admin, rt, tmp_path):
     bad = admin.post("/api/update/upload", data={"bundle": (io.BytesIO(b"nope"), "x.tar.gz")}, headers=H,
                      environ_overrides=REMOTE, content_type="multipart/form-data")
     assert bad.status_code == 400 and "error" in bad.json
+
+
+needs_sh = pytest.mark.skipif(__import__("shutil").which("sh") is None, reason="needs sh")
+
+
+@needs_sh
+def test_post_install_hook_runs_once_with_data_dir(tmp_path):
+    root = tmp_path / "data" / "app"
+    files = {"VERSION": "0.2.0\n", "server/dashboard/__init__.py": "",
+             "post-install.sh": 'echo ran >> "$DASHBOARD_DATA/hook.txt"\n'}
+    assert install_bundle(make_tar(tmp_path / "a.tgz", files=files), root) == "0.2.0"
+    assert (tmp_path / "data" / "hook.txt").read_text().split() == ["ran"]
+
+
+@needs_sh
+def test_failing_post_install_hook_aborts_install(tmp_path):
+    root = tmp_path / "app"
+    install_bundle(make_tar(tmp_path / "a.tgz", "0.2.0"), root)
+    files = {"VERSION": "0.3.0\n", "server/dashboard/__init__.py": "", "post-install.sh": "exit 3\n"}
+    with pytest.raises(UpdateError):
+        install_bundle(make_tar(tmp_path / "b.tgz", files=files), root)
+    assert_untouched(root, "0.2.0")
+    assert not (root / "releases" / "0.3.0").exists()

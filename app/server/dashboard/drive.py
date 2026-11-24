@@ -52,11 +52,13 @@ def _get(url, http, cap):
 class _FolderPage(HTMLParser):
     def __init__(self):
         super().__init__()
-        self.entries, self.cur, self.in_title = [], None, False
+        self.entries, self.cur, self.in_title, self.listing = [], None, False, False
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
         cls = (a.get("class") or "").split()
+        if "flip-entries" in cls:
+            self.listing = True
         if tag == "div" and "flip-entry" in cls and (a.get("id") or "").startswith("entry-"):
             self.cur = {"id": a["id"][6:], "name": "", "href": ""}
             self.entries.append(self.cur)
@@ -86,6 +88,8 @@ def list_folder(folder_id, api_key="", http=None) -> list:
         raise DriveError(NOT_PUBLIC)
     p = _FolderPage()
     p.feed(page.decode("utf-8", "replace"))
+    if not p.listing:
+        raise DriveError("Google Drive sent an unexpected page instead of the folder. Keeping the photos already here.")
     return [{"id": e["id"], "name": e["name"].strip()} for e in p.entries
             if re.fullmatch(ID_RE, e["id"]) and "/folders/" not in e["href"] and _is_image_name(e["name"].strip())]
 
@@ -103,7 +107,7 @@ def _list_api(folder_id, api_key, http):
             raise DriveError(f"{e} (If the API key is wrong, clear it to use the public link.)") from None
         d = json.loads(body)
         files += [{"id": f["id"], "name": f.get("name", "")} for f in d.get("files", [])
-                  if str(f.get("mimeType", "")).startswith("image/")]
+                  if str(f.get("mimeType", "")).startswith("image/") and re.fullmatch(ID_RE, str(f.get("id", "")))]
         token = d.get("nextPageToken")
         if not token:
             break
@@ -151,6 +155,10 @@ class DriveSync:
             result["error"] = str(e)
             return result
         wanted = {f["id"]: f["name"] for f in files}
+        if not wanted and present:
+            result["error"] = ("Drive shows no photos in this folder. Is it still shared with \"Anyone with the link\"? "
+                               "Keeping the photos already here.")
+            return result
         for stem, path in present.items():
             if stem not in wanted:
                 path.unlink(missing_ok=True)

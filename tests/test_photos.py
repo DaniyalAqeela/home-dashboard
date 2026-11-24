@@ -1,4 +1,5 @@
 import io
+import json
 import os
 
 import pytest
@@ -137,3 +138,17 @@ def test_relative_data_dir_still_serves_photos(tmp_path, monkeypatch):
     (rt.photos.drive_dir / "abc.jpg").write_bytes(b"x")
     assert app.test_client().get("/photo/drive/abc.jpg").status_code == 200
     assert rt.screenshot_path.is_absolute()
+
+
+def test_slideshow_by_name_uses_real_names(tmp_path):
+    lib = PhotoLibrary(tmp_path)
+    for stem in ("aaa", "bbb"):
+        (lib.drive_dir / f"{stem}.jpg").write_bytes(b"x")
+    (lib.drive_dir / "index.json").write_text(json.dumps({"aaa": "Zebra.jpg", "bbb": "Apple.jpg"}))
+    (lib.upload_dir / "0000ffff__Mango.jpg").write_bytes(b"x")
+    w = {"id": "p", "type": "photos", "options": {"interval": 1, "order": "name", "source": "both"}}
+    s, seen = Slideshow(), []
+    for t in range(3):
+        s.tick([w], lib, t * 10)
+        seen.append(s.current("p").name)
+    assert seen == ["bbb.jpg", "0000ffff__Mango.jpg", "aaa.jpg"]

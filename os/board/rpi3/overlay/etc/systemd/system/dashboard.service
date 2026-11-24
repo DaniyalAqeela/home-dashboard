@@ -1,4 +1,5 @@
 [Unit]
+StartLimitIntervalSec=0
 Description=Home dashboard server
 After=dashboard-prepare.service network.target
 Requires=dashboard-prepare.service

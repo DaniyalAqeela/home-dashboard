@@ -86,12 +86,12 @@ class Runtime:
         now = time.monotonic()
         for job in self._jobs:
             seconds, fn, due, background, running = job
-            if now < due:
-                continue
+            if now < due or (background and running.is_set()):
+                continue  # a busy background job keeps its due time, so a trigger isn't lost
             job[2] = now + (seconds() if callable(seconds) else seconds)
             if not background:
                 self._run_job(fn)
-            elif not running.is_set():
+            else:
                 running.set()
                 threading.Thread(target=self._run_job, args=(fn, running), daemon=True).start()
 

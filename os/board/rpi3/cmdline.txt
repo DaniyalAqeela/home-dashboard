@@ -1,0 +1,1 @@
+root=/dev/mmcblk0p2 rootwait ro fsck.repair=yes net.ifnames=0 console=tty3 quiet loglevel=3 logo.nologo vt.global_cursor_default=0 consoleblank=0

@@ -1,0 +1,15 @@
+# Raspberry Pi 3B firmware config for the home dashboard.
+start_file=start.elf
+fixup_file=fixup.dat
+kernel=Image
+arm_64bit=1
+
+# Full KMS graphics driver (Qt eglfs draws through it).
+dtoverlay=vc4-kms-v3d
+max_framebuffers=1
+gpu_mem=64
+
+# No rainbow splash, no boot delay; overscan is handled by the dashboard's edge padding.
+disable_splash=1
+boot_delay=0
+disable_overscan=1

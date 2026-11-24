@@ -1,0 +1,20 @@
+#!/bin/sh
+# Runs the QML display from the app release the server is using; falls back to
+# the factory QML if that release's QML won't load.
+FACTORY=/usr/share/dashboard/factory
+DIR=$(cat /run/dashboard/appdir 2>/dev/null)
+[ -d "$DIR/display" ] || DIR=$FACTORY
+
+export QT_QPA_PLATFORM=eglfs QT_QPA_EGLFS_INTEGRATION=eglfs_kms
+export QT_QPA_EGLFS_HIDECURSOR=1 QT_QPA_EGLFS_DISABLE_INPUT=1 QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+export XDG_RUNTIME_DIR=/run/dashboard QML_XHR_ALLOW_FILE_READ=0
+[ -f /data/etc/eglfs.json ] && export QT_QPA_EGLFS_KMS_CONFIG=/data/etc/eglfs.json
+
+start=$(date +%s)
+dashboard-display "$DIR/display/Main.qml" http://127.0.0.1
+rc=$?
+if [ "$rc" -ne 0 ] && [ $(( $(date +%s) - start )) -lt 10 ] && [ "$DIR" != "$FACTORY" ]; then
+	echo "display-run: QML from $DIR failed, using the factory QML" >&2
+	exec dashboard-display "$FACTORY/display/Main.qml" http://127.0.0.1
+fi
+exit "$rc"

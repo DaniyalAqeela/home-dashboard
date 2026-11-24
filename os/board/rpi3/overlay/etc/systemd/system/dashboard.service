@@ -1,0 +1,13 @@
+[Unit]
+Description=Home dashboard server
+After=dashboard-prepare.service network.target
+Requires=dashboard-prepare.service
+
+[Service]
+ExecStart=/usr/libexec/dashboard/app-launcher
+Restart=always
+RestartSec=2
+Environment=PYTHONUNBUFFERED=1 HOME=/data
+
+[Install]
+WantedBy=multi-user.target

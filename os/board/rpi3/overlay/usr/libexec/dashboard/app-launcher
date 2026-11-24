@@ -1,0 +1,35 @@
+#!/bin/sh
+# Starts the dashboard server from the current app release, with automatic
+# rollback (spec section 7.6). The server deletes /data/app/attempts once it has
+# been healthy for 30 s, so the counter only climbs while a release keeps failing.
+APP=/data/app
+FACTORY=/usr/share/dashboard/factory
+mkdir -p /run/dashboard "$APP/releases"
+
+n=$(cat "$APP/attempts" 2>/dev/null)
+case "$n" in ''|*[!0-9]*) n=0 ;; esac
+n=$((n + 1))
+echo "$n" > "$APP/attempts"
+
+if [ "$n" -gt 3 ] && [ -L "$APP/previous" ] && [ ! -e "$APP/rolled-back" ]; then
+	echo "app-launcher: current release keeps failing, rolling back" >&2
+	cur=$(readlink "$APP/current")
+	prev=$(readlink "$APP/previous")
+	ln -sfn "$prev" "$APP/current.new" && mv -T "$APP/current.new" "$APP/current"
+	ln -sfn "$cur" "$APP/previous.new" && mv -T "$APP/previous.new" "$APP/previous"
+	touch "$APP/rolled-back"
+	n=1
+	echo "$n" > "$APP/attempts"
+fi
+
+DIR=$FACTORY
+if [ "$n" -le 6 ] && [ -f "$APP/current/VERSION" ]; then
+	DIR=$(readlink -f "$APP/current")
+elif [ "$n" -gt 6 ]; then
+	echo "app-launcher: no release starts, running the factory app" >&2
+fi
+sync
+echo "$DIR" > /run/dashboard/appdir
+
+export PYTHONPATH="$DIR/server"
+exec python3 -m dashboard --data /data --boot /boot --appdir "$DIR" --port 80

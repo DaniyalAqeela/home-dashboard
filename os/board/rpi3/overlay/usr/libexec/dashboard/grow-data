@@ -1,0 +1,13 @@
+#!/bin/sh
+# Grow partition 3 (/data) to the end of the SD card. Idempotent; runs before
+# /data is mounted. The filesystem itself is grown online by prepare-data.
+DISK=/dev/mmcblk0
+SYS=/sys/block/mmcblk0
+[ -e "$SYS/mmcblk0p3" ] || exit 0
+total=$(cat "$SYS/size")
+end=$(( $(cat "$SYS/mmcblk0p3/start") + $(cat "$SYS/mmcblk0p3/size") ))
+if [ $(( total - end )) -gt 8192 ]; then
+	echo "grow-data: growing ${DISK}p3 to fill the card"
+	echo ",+" | sfdisk --no-reread --no-tell-kernel -N 3 "$DISK" && partx -u "$DISK"
+fi
+exit 0

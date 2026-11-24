@@ -1,0 +1,16 @@
+#!/bin/sh
+# Make sure /data is mounted, full size and has the directories the app needs.
+PART=/dev/mmcblk0p3
+if ! mountpoint -q /data; then
+	# shortcut: an unmountable data partition is reformatted (settings are lost,
+	# photos re-sync, Restore brings design back). Better than a dead dashboard.
+	echo "prepare-data: /data is not mounted, reformatting $PART" >&2
+	mkfs.ext4 -F -q -L data "$PART" && mount -o noatime "$PART" /data || exit 1
+fi
+resize2fs "$PART" >/dev/null 2>&1 || true
+mkdir -p /data/etc /data/app/releases /data/photos /data/cache /data/timesync /run/dashboard
+[ -e /data/etc/localtime ] || ln -sfn /usr/share/zoneinfo/UTC /data/etc/localtime
+W=/data/etc/wpa_supplicant-wlan0.conf
+[ -s "$W" ] || printf 'ctrl_interface=/run/wpa_supplicant\nupdate_config=1\ncountry=US\n' > "$W"
+chown systemd-timesync:systemd-timesync /data/timesync 2>/dev/null || true
+exit 0

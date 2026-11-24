@@ -1,0 +1,10 @@
+[Match]
+Name=eth0
+
+[Network]
+DHCP=yes
+MulticastDNS=yes
+
+[DHCPv4]
+ClientIdentifier=mac
+RouteMetric=100

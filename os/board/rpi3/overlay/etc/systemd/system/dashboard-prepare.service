@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare /data for the dashboard
+After=data.mount local-fs.target
+Before=dashboard.service systemd-timesyncd.service wpa_supplicant@wlan0.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/dashboard/prepare-data
+
+[Install]
+WantedBy=multi-user.target

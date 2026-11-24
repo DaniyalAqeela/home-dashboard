@@ -1,0 +1,11 @@
+[Unit]
+Description=Grow the data partition to fill the SD card
+DefaultDependencies=no
+Requires=dev-mmcblk0.device
+After=dev-mmcblk0.device systemd-udevd.service
+Before=data.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/dashboard/grow-data

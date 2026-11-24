@@ -1,0 +1,5 @@
+# Root stays read-only; everything writable lives on /data (spec section 7.2).
+/dev/root       /      ext4   ro,noatime                                                    0 0
+/dev/mmcblk0p1  /boot  vfat   ro,noatime,nofail,umask=0022                                  0 0
+/dev/mmcblk0p3  /data  ext4   noatime,nofail,x-systemd.requires=dashboard-grow.service      0 2
+tmpfs           /tmp   tmpfs  mode=1777,nosuid,nodev,size=64M                               0 0

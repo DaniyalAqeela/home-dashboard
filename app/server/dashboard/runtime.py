@@ -16,9 +16,9 @@ log = logging.getLogger("dashboard")
 
 class Runtime:
     def __init__(self, data_dir, boot_dir, app_dir, dev=False, port=80):
-        self.data_dir = Path(data_dir)
-        self.boot_dir = Path(boot_dir)
-        self.app_dir = Path(app_dir)
+        self.data_dir = Path(data_dir).resolve()  # Flask and the display resolve relative paths elsewhere
+        self.boot_dir = Path(boot_dir).resolve()
+        self.app_dir = Path(app_dir).resolve()
         self.dev = dev
         self.data_dir.mkdir(parents=True, exist_ok=True)
         self.config_path = self.data_dir / "config.json"

@@ -122,3 +122,18 @@ def test_slideshow_moves_on_when_current_photo_deleted(tmp_path):
     s.tick([w], lib, 0)
     s.current("p").unlink()
     assert s.tick([w], lib, 1) is True and s.current("p").name == "id1.jpg"
+
+
+def test_relative_data_dir_still_serves_photos(tmp_path, monkeypatch):
+    from conftest import APP_DIR
+    from dashboard import features
+    from dashboard.runtime import Runtime
+    from dashboard.web import create_app
+    monkeypatch.chdir(tmp_path)
+    rt = Runtime("data", "boot", APP_DIR, dev=True)
+    features.install(rt)
+    app = create_app(rt)
+    features.install_routes(app, rt)
+    (rt.photos.drive_dir / "abc.jpg").write_bytes(b"x")
+    assert app.test_client().get("/photo/drive/abc.jpg").status_code == 200
+    assert rt.screenshot_path.is_absolute()

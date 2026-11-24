@@ -6,3 +6,4 @@ __pycache__/
 *.img.xz
 .pytest_cache/
 .superpowers/
+devdata.log

@@ -4,6 +4,8 @@
 #   bash scripts/build-image.sh menuconfig # any other Buildroot make target
 # Output: dist/dashboard-<version>.img.xz
 set -euo pipefail
+# WSL appends Windows dirs (with spaces) to PATH; Buildroot refuses that.
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BR_VERSION=2026.02.3
@@ -13,6 +15,13 @@ OUT="$WORK/out"
 JOBS="${JOBS:-6}"   # Qt/Mesa compiles are memory hungry; 6 jobs fit in ~7 GB
 
 mkdir -p "$WORK" "$REPO/dist"
+# Ubuntu 26.04 defaults to uutils coreutils, which Buildroot rejects; use the GNU
+# ones (installed as /usr/bin/gnu*) for this build only.
+if ls /usr/bin/gnuinstall >/dev/null 2>&1; then
+	mkdir -p "$WORK/gnubin"
+	for f in /usr/bin/gnu*; do ln -sfn "$f" "$WORK/gnubin/$(basename "$f" | sed 's/^gnu//')"; done
+	export PATH="$WORK/gnubin:$PATH"
+fi
 # Buildroot can't handle spaces in paths (and /mnt/c is slow), so build from a copy.
 SRC="$WORK/src"
 mkdir -p "$SRC"
